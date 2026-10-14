@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Brand Images Search – Open Food Facts</title>
+<link rel="stylesheet" href="assets/style.css">
+<link rel="preconnect" href="https://raw.githubusercontent.com">
+<style>
+  .search-row select { max-width: 200px; }
+  .loading { text-align: center; padding: 3rem; color: var(--muted); }
+</style>
+</head>
+<body>
+<header class="header">
+  <div class="container">
+    <h1><a href="./">🍊 Brand Images</a></h1>
+    <p class="subtitle">
+      Searchable logos from
+      <a href="https://github.com/openfoodfacts/brand-images" target="_blank" rel="noopener">openfoodfacts/brand-images</a>
+      <span id="metaInfo"></span>
+      · <a href="generate-card.html">Generate Card</a>
+    </p>
+  </div>
+</header>
+
+<main class="container">
+  <form class="search-bar" id="searchForm" role="search" onsubmit="return false;">
+    <div class="search-row">
+      <input type="search" id="q" placeholder="Search brands, stores, agencies…" autocomplete="off" autofocus>
+      <select id="cat" aria-label="Category">
+        <option value="all">All categories</option>
+        <option value="brands">Brands</option>
+        <option value="stores">Stores</option>
+        <option value="agencies">Agencies</option>
+      </select>
+      <select id="country" aria-label="Country">
+        <option value="all">All countries</option>
+      </select>
+      <button type="button" id="btnSearch">Search</button>
+    </div>
+    <div class="meta-row">
+      <span id="resultCount">Loading…</span>
+      <label class="toggle">
+        <input type="checkbox" id="lazyOnly" checked> Lazy-load images
+      </label>
+    </div>
+  </form>
+
+  <div class="loading" id="loading">Loading index…</div>
+  <div class="grid" id="grid" hidden></div>
+  <p class="empty" id="empty" hidden>No results.</p>
+  <nav class="pagination" id="pagination" hidden></nav>
+</main>
+
+<footer class="footer">
+  <div class="container">
+    <p>
+      Logos remain the property of their respective owners.
+      Data from
+      <a href="https://github.com/openfoodfacts/brand-images" target="_blank" rel="noopener">brand-images</a>
+      (Open Food Facts). Static site – works on GitHub Pages.
+    </p>
+  </div>
+</footer>
+
+<script>
+(function () {
+  const PER_PAGE = 60;
+  const countryNames = {
+    '001': 'Worldwide', us: 'United States', de: 'Germany', gb: 'United Kingdom',
+    ca: 'Canada', nl: 'Netherlands', pl: 'Poland', it: 'Italy', es: 'Spain',
+    au: 'Australia', fx: 'France (metro)', fr: 'France', be: 'Belgium',
+    at: 'Austria', cz: 'Czechia', sk: 'Slovakia', za: 'South Africa',
+    ch: 'Switzerland', ie: 'Ireland', br: 'Brazil', in: 'India',
+    jp: 'Japan', se: 'Sweden', no: 'Norway', dk: 'Denmark',
+    fi: 'Finland', pt: 'Portugal', ro: 'Romania', hu: 'Hungary',
+    hr: 'Croatia', si: 'Slovenia', rs: 'Serbia', bg: 'Bulgaria',
+    gr: 'Greece', tr: 'Turkey', ru: 'Russia', ua: 'Ukraine',
+    mx: 'Mexico', ar: 'Argentina', cl: 'Chile', co: 'Colombia',
+    nz: 'New Zealand', kr: 'South Korea', cn: 'China', tw: 'Taiwan',
+    hk: 'Hong Kong', sg: 'Singapore', my: 'Malaysia', th: 'Thailand',
+    id: 'Indonesia', ph: 'Philippines', vn: 'Vietnam', il: 'Israel',
+    ae: 'UAE', sa: 'Saudi Arabia', eg: 'Egypt', ng: 'Nigeria',
+    ke: 'Kenya', ma: 'Morocco', lu: 'Luxembourg', lt: 'Lithuania',
+    lv: 'Latvia', ee: 'Estonia', is: 'Iceland'
+  };
+
+  let allItems = [];
+  let filtered = [];
+  let page = 1;
+
+  const grid = document.getElementById('grid');
+  const empty = document.getElementById('empty');
+  const pagination = document.getElementById('pagination');
+  const resultCount = document.getElementById('resultCount');
+  const loading = document.getElementById('loading');
+
+  function h(s) {
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
+  function getFilters() {
+    return {
+      q: document.getElementById('q').value.trim().toLowerCase(),
+      cat: document.getElementById('cat').value,
+      country: document.getElementById('country').value
+    };
+  }
+
+  function applyFilters() {
+    const { q, cat, country } = getFilters();
+    filtered = allItems.filter(item => {
+      if (cat !== 'all' && item.category !== cat) return false;
+      if (country !== 'all') {
+        const cs = item.countries || [];
+        if (!cs.includes(country)) return false;
+      }
+      if (q) {
+        const hay = (item.display + ' ' + item.name + ' ' + item.filename).toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+    page = 1;
+    render();
+  }
+
+  function render() {
+    const total = filtered.length;
+    const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
+    if (page > totalPages) page = totalPages;
+    const slice = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE);
+
+    resultCount.textContent = total.toLocaleString() + ' result' + (total !== 1 ? 's' : '');
+
+    if (total === 0) {
+      grid.hidden = true;
+      empty.hidden = false;
+      pagination.hidden = true;
+      return;
+    }
+    empty.hidden = true;
+    grid.hidden = false;
+
+    const lazy = document.getElementById('lazyOnly').checked;
+    grid.innerHTML = slice.map(item => {
+      const url = item.preferred_url || item.url;
+      const ext = (item.preferred_ext || item.ext || '').toUpperCase();
+      const countries = (item.countries || []).slice(0, 3).map(c => String(c).toUpperCase()).join(', ');
+      const more = (item.countries || []).length > 3 ? '…' : '';
+      return `
+      <article class="card">
+        <a class="card-link" href="${h(url)}" target="_blank" rel="noopener" title="Open original">
+          <div class="thumb">
+            <img src="${h(url)}" alt="${h(item.display)}"
+                 ${lazy ? 'loading="lazy"' : ''} decoding="async"
+                 onerror="this.parentElement.classList.add('broken')">
+          </div>
+          <div class="info">
+            <span class="name">${h(item.display)}</span>
+            <span class="badge ${h(item.category)}">${h(item.category)}</span>
+            <span class="ext">${h(ext)}</span>
+            ${countries ? `<span class="ext countries">${h(countries)}${more}</span>` : ''}
+          </div>
+        </a>
+        <div class="actions">
+          <button type="button" class="btn-copy" data-url="${h(url)}">Copy URL</button>
+          <a class="btn-generate" href="generate-card.html?logo=${encodeURIComponent(url)}&name=${encodeURIComponent(item.display)}">Generate</a>
+        </div>
+      </article>`;
+    }).join('');
+
+    // copy buttons
+    grid.querySelectorAll('.btn-copy').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.preventDefault();
+        e.stopPropagation();
+        const url = btn.getAttribute('data-url');
+        navigator.clipboard.writeText(url).then(() => {
+          btn.textContent = 'Copied!';
+          btn.classList.add('copied');
+          setTimeout(() => { btn.textContent = 'Copy URL'; btn.classList.remove('copied'); }, 1500);
+        });
+      });
+    });
+
+    // pagination
+    if (totalPages > 1) {
+      pagination.hidden = false;
+      pagination.innerHTML = `
+        ${page > 1 ? `<a href="#" data-p="${page - 1}">← Prev</a>` : '<span></span>'}
+        <span>Page ${page} / ${totalPages}</span>
+        ${page < totalPages ? `<a href="#" data-p="${page + 1}">Next →</a>` : '<span></span>'}
+      `;
+      pagination.querySelectorAll('a[data-p]').forEach(a => {
+        a.addEventListener('click', e => {
+          e.preventDefault();
+          page = +a.getAttribute('data-p');
+          render();
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+      });
+    } else {
+      pagination.hidden = true;
+    }
+  }
+
+  function fillCountries(countryMap) {
+    const sel = document.getElementById('country');
+    const entries = Object.entries(countryMap || {}).sort((a, b) => b[1] - a[1]);
+    entries.forEach(([code, cnt]) => {
+      const opt = document.createElement('option');
+      opt.value = code;
+      opt.textContent = (countryNames[code] || code.toUpperCase()) + ' (' + cnt.toLocaleString() + ')';
+      sel.appendChild(opt);
+    });
+  }
+
+  // events
+  document.getElementById('btnSearch').addEventListener('click', applyFilters);
+  document.getElementById('q').addEventListener('keydown', e => {
+    if (e.key === 'Enter') applyFilters();
+  });
+  document.getElementById('cat').addEventListener('change', applyFilters);
+  document.getElementById('country').addEventListener('change', applyFilters);
+
+  // load index
+  fetch('data/index.json')
+    .then(r => {
+      if (!r.ok) throw new Error('Failed to load index.json');
+      return r.json();
+    })
+    .then(data => {
+      allItems = data.items || [];
+      fillCountries(data.enriched && data.enriched.countries);
+      const meta = document.getElementById('metaInfo');
+      meta.textContent = ' · ' + (data.count || allItems.length).toLocaleString() + ' assets'
+        + (data.generated ? ' · updated ' + data.generated.slice(0, 10) : '');
+      loading.hidden = true;
+      applyFilters();
+    })
+    .catch(err => {
+      loading.textContent = 'Error: ' + err.message + '. Make sure data/index.json is present.';
+    });
+})();
+</script>
+</body>
+</html>

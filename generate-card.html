@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Generate Card – Card</title>
+<link rel="stylesheet" href="assets/style.css">
+<style>
+  .generator {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+    margin-top: 1.5rem;
+  }
+  @media (max-width: 860px) {
+    .generator { grid-template-columns: 1fr; }
+  }
+  .form-card, .preview-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+  }
+  .form-card label {
+    display: block;
+    margin-bottom: 0.35rem;
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+  .form-card input[type="color"],
+  .form-card input[type="url"],
+  .form-card input[type="range"] {
+    width: 100%;
+    padding: 0.6rem 0.8rem;
+    margin-bottom: 1rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 1rem;
+  }
+  .form-card input[type="color"] {
+    height: 42px;
+    padding: 0.2rem;
+  }
+  .form-card input[type="range"] {
+    padding: 0.4rem 0;
+  }
+  .swatches {
+    display: flex;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+  }
+  .swatch {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: 3px solid transparent;
+    cursor: pointer;
+    transition: transform .12s, border-color .12s;
+    box-shadow: 0 0 0 1px rgba(255,255,255,.15);
+  }
+  .swatch:hover { transform: scale(1.12); }
+  .swatch.active {
+    border-color: #fff;
+    box-shadow: 0 0 0 2px var(--accent);
+  }
+  .swatch-divider {
+    width: 1px;
+    height: 36px;
+    background: var(--border);
+    margin: 0 0.25rem;
+    align-self: center;
+    flex-shrink: 0;
+  }
+  .preview-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 340px;
+  }
+  #cardCanvas {
+    max-width: 100%;
+    border-radius: 12px;
+  }
+  .actions {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 0.5rem;
+    flex-wrap: wrap;
+  }
+  .btn {
+    padding: 0.65rem 1.2rem;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 0.95rem;
+  }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+  .btn:hover { filter: brightness(1.1); }
+  .back-link { margin-bottom: 1rem; display: inline-block; }
+  .hint { font-size: 0.8rem; color: var(--muted); margin-top: -0.5rem; margin-bottom: 1rem; }
+  .status { font-size: 0.85rem; color: var(--muted); margin-top: 0.75rem; }
+</style>
+</head>
+<body>
+<header class="header">
+  <div class="container">
+    <h1><a href="./">🍊 Brand Images</a></h1>
+    <p class="subtitle">Minimal card – logo centered, pick from detected colors</p>
+  </div>
+</header>
+
+<main class="container">
+  <a class="back-link" href="./">← Back to search</a>
+
+  <div class="generator">
+    <div class="form-card">
+      <form onsubmit="return false;">
+        <label for="logoUrl">Logo URL</label>
+        <input type="url" id="logoUrl" value=""
+               placeholder="https://raw.githubusercontent.com/...">
+        <p class="hint">Pre-filled from search, or paste any logo URL from the repo.</p>
+
+        <label>Detected colors (click to use)</label>
+        <div class="swatches" id="swatches"></div>
+
+        <label for="bgColor">Background (manual)</label>
+        <input type="color" id="bgColor" value="#6b7280">
+
+        <label for="logoSize">Logo size <span id="sizeLabel">70%</span></label>
+        <input type="range" id="logoSize" min="10" max="100" value="70" step="5">
+
+        <div class="actions">
+          <button type="button" class="btn btn-primary" id="btnGenerate">Generate</button>
+          <button type="button" class="btn btn-secondary" id="btnDownload">Download PNG</button>
+        </div>
+        <p class="status" id="status"></p>
+      </form>
+    </div>
+
+    <div class="preview-card">
+      <canvas id="cardCanvas" width="640" height="400"></canvas>
+    </div>
+  </div>
+</main>
+
+<footer class="footer">
+  <div class="container">
+    <p>Just the colored card + centered logo. Pick a detected color or set your own.</p>
+  </div>
+</footer>
+
+<script>
+(function () {
+  // Read URL params
+  const params = new URLSearchParams(location.search);
+  if (params.get('logo')) document.getElementById('logoUrl').value = params.get('logo');
+  if (params.get('name')) { /* name used only for download filename */ window.__cardName = params.get('name'); }
+
+  const canvas = document.getElementById('cardCanvas');
+  const ctx = canvas.getContext('2d');
+  const statusEl = document.getElementById('status');
+  const swatchesEl = document.getElementById('swatches');
+  let currentImg = null;
+
+  function setStatus(msg) {
+    statusEl.textContent = msg || '';
+  }
+
+  // Quantize color to reduce noise (bucket size 24)
+  function quantize(r, g, b) {
+    const q = 24;
+    return [
+      Math.round(r / q) * q,
+      Math.round(g / q) * q,
+      Math.round(b / q) * q
+    ];
+  }
+
+  function rgbToHex(r, g, b) {
+    return '#' + [r, g, b].map(x => Math.max(0, Math.min(255, x)).toString(16).padStart(2, '0')).join('');
+  }
+
+  // Extract top N dominant colors, ignoring transparent + near-white + near-black
+  function extractColors(img, maxColors = 5) {
+    const tmp = document.createElement('canvas');
+    const size = 80;
+    tmp.width = size;
+    tmp.height = size;
+    const tctx = tmp.getContext('2d');
+    // draw on transparent – we only read non-transparent pixels
+    tctx.clearRect(0, 0, size, size);
+    tctx.drawImage(img, 0, 0, size, size);
+    const data = tctx.getImageData(0, 0, size, size).data;
+
+    const buckets = new Map();
+
+    for (let i = 0; i < data.length; i += 4) {
+      const a = data[i + 3];
+      if (a < 50) continue; // transparent / semi-transparent
+
+      let r = data[i], g = data[i + 1], b = data[i + 2];
+
+      // skip near-white (common baked-in logo backgrounds)
+      if (r > 240 && g > 240 && b > 240) continue;
+      // skip near-black
+      if (r < 15 && g < 15 && b < 15) continue;
+
+      const [qr, qg, qb] = quantize(r, g, b);
+      const key = qr + ',' + qg + ',' + qb;
+      const entry = buckets.get(key) || { r: 0, g: 0, b: 0, count: 0 };
+      entry.r += r;
+      entry.g += g;
+      entry.b += b;
+      entry.count++;
+      buckets.set(key, entry);
+    }
+
+    // sort by frequency
+    const sorted = [...buckets.values()]
+      .filter(e => e.count >= 3)
+      .sort((a, b) => b.count - a.count)
+      .slice(0, maxColors)
+      .map(e => rgbToHex(
+        Math.round(e.r / e.count),
+        Math.round(e.g / e.count),
+        Math.round(e.b / e.count)
+      ));
+
+    // fallback if nothing found
+    if (sorted.length === 0) sorted.push('#6b7280');
+    return sorted;
+  }
+
+  function renderSwatches(colors) {
+    swatchesEl.innerHTML = '';
+    // Always offer white + black as extra options, then detected colors
+    const extras = ['#ffffff', '#000000'];
+    const all = extras.concat(colors.filter(c => {
+      const x = c.toLowerCase();
+      return x !== '#ffffff' && x !== '#fff' && x !== '#000000' && x !== '#000';
+    }));
+    all.forEach((hex, idx) => {
+      // vertical line between fixed (white/black) and detected colors
+      if (idx === 2 && colors.length) {
+        const div = document.createElement('div');
+        div.className = 'swatch-divider';
+        div.setAttribute('aria-hidden', 'true');
+        swatchesEl.appendChild(div);
+      }
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      const defaultIdx = colors.length ? 2 : 0;
+      btn.className = 'swatch' + (idx === defaultIdx ? ' active' : '');
+      btn.style.background = hex;
+      btn.title = hex === '#ffffff' ? 'White' : (hex === '#000000' ? 'Black' : hex);
+      if (hex === '#ffffff') btn.style.boxShadow = '0 0 0 1px rgba(0,0,0,.35)';
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById('bgColor').value = hex;
+        redraw();
+      });
+      swatchesEl.appendChild(btn);
+    });
+  }
+
+  function loadImage(url) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('Could not load logo (CORS or network)'));
+      img.src = url;
+    });
+  }
+
+  function drawCard(img, bg, sizePct) {
+    const W = canvas.width;
+    const H = canvas.height;
+    const pct = (sizePct || 70) / 100;
+
+    // Solid fill – no effects
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, W, H);
+
+    // Center logo
+    const maxW = W * pct;
+    const maxH = H * pct;
+    let lw = img.width;
+    let lh = img.height;
+    const scale = Math.min(maxW / lw, maxH / lh);
+    lw *= scale;
+    lh *= scale;
+    const lx = (W - lw) / 2;
+    const ly = (H - lh) / 2;
+
+    // Prefer crisp pixels for small source images; smooth for large/SVG
+    const upscaling = (lw > img.width * 1.5) || (lh > img.height * 1.5);
+    ctx.imageSmoothingEnabled = !upscaling || img.width > 200;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(img, lx, ly, lw, lh);
+  }
+
+  function redraw() {
+    if (!currentImg) return;
+    const bg = document.getElementById('bgColor').value;
+    const size = +document.getElementById('logoSize').value;
+    drawCard(currentImg, bg, size);
+  }
+
+  async function generate() {
+    const url = document.getElementById('logoUrl').value.trim();
+    if (!url) {
+      setStatus('Please provide a logo URL');
+      return;
+    }
+
+    setStatus('Loading logo…');
+    try {
+      currentImg = await loadImage(url);
+      const colors = extractColors(currentImg, 5);
+      renderSwatches(colors);
+      document.getElementById('bgColor').value = colors[0] || '#ffffff';
+      redraw();
+      setStatus('Ready – ' + colors.length + ' color(s) detected');
+    } catch (e) {
+      setStatus(e.message || 'Failed to load logo');
+      console.error(e);
+    }
+  }
+
+  document.getElementById('btnGenerate').addEventListener('click', generate);
+
+  document.getElementById('bgColor').addEventListener('input', () => {
+    document.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
+    redraw();
+  });
+
+  document.getElementById('logoSize').addEventListener('input', (e) => {
+    document.getElementById('sizeLabel').textContent = e.target.value + '%';
+    redraw();
+  });
+
+  document.getElementById('btnDownload').addEventListener('click', () => {
+    const link = document.createElement('a');
+    const n = 'Card' || 'card';
+    link.download = n.replace(/[^a-z0-9]/gi, '-') + '-card.png';
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+  });
+
+  if (document.getElementById('logoUrl').value) {
+    generate();
+  }
+})();
+</script>
+</body>
+</html>
