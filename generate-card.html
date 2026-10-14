@@ -124,7 +124,10 @@
         <label for="logoUrl">Logo URL</label>
         <input type="url" id="logoUrl" value=""
                placeholder="https://raw.githubusercontent.com/...">
-        <p class="hint">Pre-filled from search, or paste any logo URL from the repo.</p>
+        <p class="hint">Paste a URL, or upload a file below (no CORS issues).</p>
+
+        <label for="logoFile">Or upload logo</label>
+        <input type="file" id="logoFile" accept="image/*,.svg" style="margin-bottom:1rem; color:var(--text);">
 
         <label>Detected colors (click to use)</label>
         <div class="swatches" id="swatches"></div>
@@ -334,6 +337,29 @@
       console.error(e);
     }
   }
+
+  document.getElementById('logoFile').addEventListener('change', function (e) {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function () {
+      const img = new Image();
+      img.onload = function () {
+        currentImg = img;
+        const colors = extractColors(currentImg, 5);
+        renderSwatches(colors);
+        document.getElementById('bgColor').value = colors[0] || '#ffffff';
+        document.getElementById('logoUrl').value = '';
+        window.__cardName = file.name.replace(/\.[^.]+$/, '');
+        redraw();
+        setStatus('Ready from upload – ' + colors.length + ' color(s) detected');
+      };
+      img.onerror = function () { setStatus('Could not read uploaded image'); };
+      img.src = reader.result;
+    };
+    reader.onerror = function () { setStatus('Could not read file'); };
+    reader.readAsDataURL(file);
+  });
 
   document.getElementById('btnGenerate').addEventListener('click', generate);
 

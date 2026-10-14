@@ -1,46 +1,42 @@
-# Brand Images Search (Static)
+# Brand Images Search (Static / GitHub Pages)
 
-Searchable gallery for [openfoodfacts/brand-images](https://github.com/openfoodfacts/brand-images).
+**Version:** `1.1.0+bff39fe5`  
+**Build date:** 2026-10-15  
 
-Pure HTML/JS – works on **GitHub Pages**, Netlify, any static host.
+See `VERSION.txt` for feature list and identification.
+
+---
+
+Pure HTML/JS gallery for [openfoodfacts/brand-images](https://github.com/openfoodfacts/brand-images).  
+Works on **GitHub Pages**, Netlify, or any static host.
 
 ## Features
 
-- Search brands / stores / agencies
-- Category + country filters (auto-apply)
-- Prefer SVG when available
-- Generate card images (color from logo + white/black)
-- No server / no PHP required
+- Search + category + country filters (client-side)
+- SVG preferred when available
+- Card generator (detected colors + white/black)
+- Local logo file upload
+- No server / no PHP
 
 ## Deploy on GitHub Pages
 
-1. Create a new repo (or use an existing one)
-2. Upload the contents of this folder to the repo root (or `/docs`)
-3. Settings → Pages → Source: **Deploy from a branch** → `main` / root (or `/docs`)
-4. Wait a minute, open `https://<user>.github.io/<repo>/`
-
-### Or with a `gh-pages` branch
-
-```bash
-git checkout --orphan gh-pages
-git add .
-git commit -m "Deploy brand images search"
-git push origin gh-pages
-```
-
-Then set Pages source to the `gh-pages` branch.
+1. Upload folder contents to a repo root (or `/docs`)
+2. Settings → Pages → Deploy from branch → `main` / root
+3. Open `https://<user>.github.io/<repo>/`
 
 ## Local preview
 
 ```bash
-# any static server
-npx serve .
-# or
 python3 -m http.server 8080
+# or: npx serve .
 ```
 
-Open http://localhost:8080
+## Files
 
-## Updating the index
-
-If the upstream brand-images repo changes, regenerate `data/index.json` with the PHP tool from the full app (`generate_index.php` + NSI enrich), then replace the file here.
+| Path | Purpose |
+|------|---------|
+| `index.html` | Search UI |
+| `generate-card.html` | Card generator |
+- Local logo file upload
+| `data/index.json` | Logo index |
+| `VERSION.txt` | Build identity |

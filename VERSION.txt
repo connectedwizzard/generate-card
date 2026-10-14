@@ -1,0 +1,14 @@
+Brand Images Search (Static / GitHub Pages)
+Version: 1.1.0+bff39fe5
+Build date: 2026-10-15
+Type: static
+
+Features in this build:
+- Fully static HTML/JS (GitHub Pages ready)
+- Search + category filter + country filter (NSI)
+- SVG preferred over PNG
+- Card generator: logo centered, size slider, detected colors
+- Always-available White & Black swatches (separated by divider)
+- Local file upload for logos (no CORS issues)
+
+Identify this build by VERSION.txt or the zip filename.
